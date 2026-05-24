@@ -1,7 +1,12 @@
 import express from 'express';
+import dotenv from 'dotenv';
+import connectDB from './db.js';
 import { YSocketIO } from 'y-socket.io/dist/server';
 import { createServer} from 'http';
 import { Server } from 'socket.io';
+
+dotenv.config();
+connectDB();
 
 const app = express();
 const httpServer = createServer(app);
