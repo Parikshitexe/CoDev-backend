@@ -4,11 +4,17 @@ import connectDB from './db.js';
 import { YSocketIO } from 'y-socket.io/dist/server';
 import { createServer} from 'http';
 import { Server } from 'socket.io';
+import cors from 'cors';
+import authRouter from './routes/auth.js';
 
 dotenv.config();
 connectDB();
 
 const app = express();
+app.use(cors());
+app.use(express.json());
+app.use('/api/auth', authRouter);
+
 const httpServer = createServer(app);
 
 const io = new Server(httpServer, {
