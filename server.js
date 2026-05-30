@@ -6,6 +6,7 @@ import { createServer} from 'http';
 import { Server } from 'socket.io';
 import cors from 'cors';
 import authRouter from './routes/auth.js';
+import executeRouter from './routes/execute.js';
 
 dotenv.config();
 connectDB();
@@ -14,6 +15,7 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 app.use('/api/auth', authRouter);
+app.use('/api/execute', executeRouter);
 
 const httpServer = createServer(app);
 
