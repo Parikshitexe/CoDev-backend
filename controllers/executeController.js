@@ -1,4 +1,4 @@
-import { exec } from 'child_process';
+import { spawn, execSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 import { v4 as uuidv4 } from 'uuid';
@@ -10,7 +10,7 @@ if (!fs.existsSync(TEMP_DIR)) {
 }
 
 export const executeCode = async (req, res) => {
-  const { code, language } = req.body;
+  const { code, language, input } = req.body;
 
   if (!code || !language) {
     return res.status(400).json({ error: "Code and language are required" });
@@ -19,24 +19,30 @@ export const executeCode = async (req, res) => {
   const runId = uuidv4().replace(/-/g, '');
   let fileName = '';
   let command = '';
+  let args = [];
+  let compileCommand = '';
 
   switch (language.toLowerCase()) {
     case 'javascript':
       fileName = `run_${runId}.js`;
-      command = `node ${fileName}`;
+      command = 'node';
+      args = [fileName];
       break;
     case 'python':
       fileName = `run_${runId}.py`;
-      command = `python ${fileName}`;
+      command = 'python';
+      args = [fileName];
       break;
     case 'cpp':
       fileName = `run_${runId}.cpp`;
-      const exeName = `run_${runId}.exe`;
-      command = `g++ ${fileName} -o ${exeName} && .\\${exeName}`;
+      compileCommand = `g++ ${fileName} -o run_${runId}.exe`;
+      command = `.\\run_${runId}.exe`;
       break;
     case 'java':
       fileName = `Main_${runId}.java`;
-      command = `javac ${fileName} && java Main_${runId}`;
+      compileCommand = `javac ${fileName}`;
+      command = 'java';
+      args = [`Main_${runId}`];
       break;
     default:
       return res.status(400).json({ error: "Unsupported language" });
@@ -52,7 +58,51 @@ export const executeCode = async (req, res) => {
   try {
     fs.writeFileSync(filePath, adjustedCode);
 
-    exec(command, { cwd: TEMP_DIR, timeout: 8000 }, (error, stdout, stderr) => {
+    if (compileCommand) {
+      try {
+        execSync(compileCommand, { cwd: TEMP_DIR, stdio: 'pipe', timeout: 5000 });
+      } catch (compileError) {
+        try {
+          if (fs.existsSync(filePath)) {
+            fs.unlinkSync(filePath);
+          }
+        } catch (_) {}
+
+        return res.status(200).json({
+          stdout: "",
+          stderr: compileError.stderr ? compileError.stderr.toString() : compileError.message,
+          code: 1
+        });
+      }
+    }
+
+    const child = spawn(command, args, { cwd: TEMP_DIR, shell: true });
+
+    let stdout = '';
+    let stderr = '';
+    let timeoutTriggered = false;
+
+    const executionTimeout = setTimeout(() => {
+      timeoutTriggered = true;
+      child.kill();
+    }, 8000);
+
+    child.stdout.on('data', (data) => {
+      stdout += data.toString();
+    });
+
+    child.stderr.on('data', (data) => {
+      stderr += data.toString();
+    });
+
+    if (input) {
+      child.stdin.write(input);
+    }
+    child.stdin.end();
+
+    child.on('close', (exitCode) => {
+      clearTimeout(executionTimeout);
+
       try {
         if (fs.existsSync(filePath)) {
           fs.unlinkSync(filePath);
@@ -69,18 +119,16 @@ export const executeCode = async (req, res) => {
             fs.unlinkSync(classPath);
           }
         }
-      } catch (cleanupError) {
-        // Cleanup error suppressed
-      }
+      } catch (_) {}
 
-      if (error && error.killed) {
+      if (timeoutTriggered) {
         return res.status(504).json({ error: "Execution timed out (Max 8 seconds)" });
       }
 
       res.status(200).json({
-        stdout: stdout || "",
-        stderr: stderr || (error ? error.message : ""),
-        code: error ? error.code : 0
+        stdout,
+        stderr,
+        code: exitCode ?? 0
       });
     });
 

@@ -7,6 +7,7 @@ import { Server } from 'socket.io';
 import cors from 'cors';
 import authRouter from './routes/auth.js';
 import executeRouter from './routes/execute.js';
+import { setupYjsPersistence } from './yjsPersistence.js';
 
 dotenv.config();
 connectDB();
@@ -28,6 +29,7 @@ const io = new Server(httpServer, {
 
 const ySocketIO = new YSocketIO(io);
 ySocketIO.initialize();
+setupYjsPersistence(ySocketIO);
 
 app.get('/', (req, res)=>{
     res.status(200).json({
