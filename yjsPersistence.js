@@ -2,9 +2,15 @@ import * as Y from 'yjs';
 import Room from './models/Room.js';
 
 const debounceMap = new Map();
+const initializedRooms = new Set();
 
 export const setupYjsPersistence = (ySocketIO) => {
   ySocketIO.on('document-loaded', async (doc) => {
+    if (initializedRooms.has(doc.name)) {
+      return;
+    }
+    initializedRooms.add(doc.name);
+
     try {
       const room = await Room.findOne({ roomId: doc.name });
       if (room && room.documentState) {
@@ -37,6 +43,7 @@ export const setupYjsPersistence = (ySocketIO) => {
     });
 
     doc.on('destroy', () => {
+      initializedRooms.delete(doc.name);
       if (debounceMap.has(doc.name)) {
         clearTimeout(debounceMap.get(doc.name));
         debounceMap.delete(doc.name);
