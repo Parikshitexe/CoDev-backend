@@ -1,14 +1,3 @@
-import { spawn, execSync } from 'child_process';
-import fs from 'fs';
-import path from 'path';
-import { v4 as uuidv4 } from 'uuid';
-
-const TEMP_DIR = path.join(process.cwd(), 'temp_runs');
-
-if (!fs.existsSync(TEMP_DIR)) {
-  fs.mkdirSync(TEMP_DIR);
-}
-
 export const executeCode = async (req, res) => {
   const { code, language, input } = req.body;
 
@@ -16,123 +5,69 @@ export const executeCode = async (req, res) => {
     return res.status(400).json({ error: "Code and language are required" });
   }
 
-  const runId = uuidv4().replace(/-/g, '');
-  let fileName = '';
-  let command = '';
-  let args = [];
-  let compileCommand = '';
+  const clientId = process.env.JDOODLE_CLIENT_ID;
+  const clientSecret = process.env.JDOODLE_CLIENT_SECRET;
 
-  switch (language.toLowerCase()) {
-    case 'javascript':
-      fileName = `run_${runId}.js`;
-      command = 'node';
-      args = [fileName];
-      break;
-    case 'python':
-      fileName = `run_${runId}.py`;
-      command = 'python';
-      args = [fileName];
-      break;
-    case 'cpp':
-      fileName = `run_${runId}.cpp`;
-      compileCommand = `g++ ${fileName} -o run_${runId}.exe`;
-      command = `.\\run_${runId}.exe`;
-      break;
-    case 'java':
-      fileName = `Main_${runId}.java`;
-      compileCommand = `javac ${fileName}`;
-      command = 'java';
-      args = [`Main_${runId}`];
-      break;
-    default:
-      return res.status(400).json({ error: "Unsupported language" });
+  if (!clientId || !clientSecret) {
+    console.error("Missing JDoodle API keys in .env");
+    return res.status(500).json({ error: "Execution server not properly configured" });
   }
 
-  let adjustedCode = code;
-  if (language.toLowerCase() === 'java') {
-    adjustedCode = code.replace(/public\s+class\s+\w+/, `public class Main_${runId}`);
-  }
+  // Map our frontend language names to JDoodle's language codes
+  const languageMap = {
+    javascript: { language: "nodejs", versionIndex: "4" },
+    python: { language: "python3", versionIndex: "4" },
+    cpp: { language: "cpp", versionIndex: "5" },
+    java: { language: "java", versionIndex: "4" }
+  };
 
-  const filePath = path.join(TEMP_DIR, fileName);
+  const jDoodleConfig = languageMap[language.toLowerCase()];
+
+  if (!jDoodleConfig) {
+    return res.status(400).json({ error: "Unsupported language" });
+  }
 
   try {
-    fs.writeFileSync(filePath, adjustedCode);
+    const response = await fetch("https://api.jdoodle.com/v1/execute", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        clientId: clientId,
+        clientSecret: clientSecret,
+        script: code,
+        language: jDoodleConfig.language,
+        versionIndex: jDoodleConfig.versionIndex,
+        stdin: input || ""
+      })
+    });
 
-    if (compileCommand) {
-      try {
-        execSync(compileCommand, { cwd: TEMP_DIR, stdio: 'pipe', timeout: 5000 });
-      } catch (compileError) {
-        try {
-          if (fs.existsSync(filePath)) {
-            fs.unlinkSync(filePath);
-          }
-        } catch (_) {}
+    const data = await response.json();
 
-        return res.status(200).json({
-          stdout: "",
-          stderr: compileError.stderr ? compileError.stderr.toString() : compileError.message,
-          code: 1
-        });
-      }
+    if (!response.ok || data.error) {
+      console.error("JDoodle API Error:", data.error || data);
+      return res.status(500).json({ error: data.error || "Execution failed" });
     }
 
-    const child = spawn(command, args, { cwd: TEMP_DIR, shell: true });
+    // JDoodle returns { output: string, statusCode: number, memory: string, cpuTime: string }
+    let stdout = "";
+    let stderr = "";
 
-    let stdout = '';
-    let stderr = '';
-    let timeoutTriggered = false;
-
-    const executionTimeout = setTimeout(() => {
-      timeoutTriggered = true;
-      child.kill();
-    }, 8000);
-
-    child.stdout.on('data', (data) => {
-      stdout += data.toString();
-    });
-
-    child.stderr.on('data', (data) => {
-      stderr += data.toString();
-    });
-
-    if (input) {
-      child.stdin.write(input);
+    // A non-200 statusCode from JDoodle indicates a compilation or runtime error inside the script
+    if (data.statusCode !== 200) {
+      stderr = data.output;
+    } else {
+      stdout = data.output;
     }
-    child.stdin.end();
 
-    child.on('close', (exitCode) => {
-      clearTimeout(executionTimeout);
-
-      try {
-        if (fs.existsSync(filePath)) {
-          fs.unlinkSync(filePath);
-        }
-        if (language.toLowerCase() === 'cpp') {
-          const exePath = path.join(TEMP_DIR, `run_${runId}.exe`);
-          if (fs.existsSync(exePath)) {
-            fs.unlinkSync(exePath);
-          }
-        }
-        if (language.toLowerCase() === 'java') {
-          const classPath = path.join(TEMP_DIR, `Main_${runId}.class`);
-          if (fs.existsSync(classPath)) {
-            fs.unlinkSync(classPath);
-          }
-        }
-      } catch (_) {}
-
-      if (timeoutTriggered) {
-        return res.status(504).json({ error: "Execution timed out (Max 8 seconds)" });
-      }
-
-      res.status(200).json({
-        stdout,
-        stderr,
-        code: exitCode ?? 0
-      });
+    return res.status(200).json({
+      stdout,
+      stderr
     });
 
-  } catch (err) {
-    res.status(500).json({ error: "Local compiler failed to initialize" });
+  } catch (error) {
+    console.error("Execution Error:", error);
+    return res.status(500).json({ error: "Failed to connect to execution server" });
   }
 };
