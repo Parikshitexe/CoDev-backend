@@ -2,6 +2,13 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import User from '../models/User.js';
 
+const cookieOptions = {
+  httpOnly: true,
+  secure: process.env.NODE_ENV === 'production',
+  sameSite: 'strict',
+  maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
+};
+
 export const register = async (req, res) => {
   try {
     const { username, email, password } = req.body;
@@ -37,8 +44,9 @@ export const register = async (req, res) => {
       { expiresIn: '7d' }
     );
 
+    res.cookie('token', token, cookieOptions);
+
     res.status(201).json({
-      token,
       user: {
         id: savedUser._id,
         username: savedUser.username,
@@ -75,8 +83,9 @@ export const login = async (req, res) => {
       { expiresIn: '7d' }
     );
 
+    res.cookie('token', token, cookieOptions);
+
     res.status(200).json({
-      token,
       user: {
         id: user._id,
         username: user.username,
@@ -87,4 +96,9 @@ export const login = async (req, res) => {
   } catch (err) {
     res.status(500).json({ error: 'Login failed. Please try again.' });
   }
+};
+
+export const logout = (req, res) => {
+  res.clearCookie('token');
+  res.status(200).json({ message: 'Logged out successfully' });
 };
