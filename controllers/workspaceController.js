@@ -8,6 +8,18 @@ export const bookmarkWorkspace = async (req, res) => {
       return res.status(400).json({ error: 'Room ID is required' });
     }
 
+    if (name) {
+      const links = await UserWorkspace.find({ userId: req.user.id });
+      const roomIds = links.map(l => l.roomId);
+      const existingRoom = await Room.findOne({ 
+        roomId: { $in: roomIds }, 
+        name: { $regex: `^${name.trim()}$`, $options: 'i' } 
+      });
+      if (existingRoom && existingRoom.roomId !== roomId) {
+        return res.status(400).json({ error: 'A workspace with this name already exists' });
+      }
+    }
+
     await Room.findOneAndUpdate(
       { roomId },
       { $setOnInsert: { name: name || 'Collaborative Workspace' } },
@@ -70,9 +82,22 @@ export const renameWorkspace = async (req, res) => {
       return res.status(400).json({ error: 'Name is required' });
     }
 
+    const trimmedName = name.trim();
+    
+    const links = await UserWorkspace.find({ userId: req.user.id });
+    const roomIds = links.map(l => l.roomId);
+    const existingRoom = await Room.findOne({ 
+      roomId: { $in: roomIds }, 
+      name: { $regex: `^${trimmedName}$`, $options: 'i' } 
+    });
+    
+    if (existingRoom && existingRoom.roomId !== roomId) {
+      return res.status(400).json({ error: 'A workspace with this name already exists' });
+    }
+
     await Room.findOneAndUpdate(
       { roomId },
-      { name: name.trim() }
+      { name: trimmedName }
     );
 
     res.status(200).json({ message: 'Workspace renamed successfully' });
