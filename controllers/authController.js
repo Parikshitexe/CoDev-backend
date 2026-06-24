@@ -19,6 +19,10 @@ export const register = async (req, res) => {
       return res.status(400).json({ error: 'All fields are required' });
     }
 
+    if (password.length < 6) {
+      return res.status(400).json({ error: 'Password must be at least 6 characters long' });
+    }
+
     const emailExists = await User.findOne({ email: email.toLowerCase() });
     if (emailExists) {
       return res.status(400).json({ error: 'Email is already registered' });
@@ -154,5 +158,92 @@ export const verifyEmail = async (req, res) => {
   } catch (err) {
     console.error('Email verification failed:', err);
     res.status(500).json({ error: 'Email verification failed. Please try again.' });
+  }
+};
+
+export const forgotPassword = async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email) {
+      return res.status(400).json({ error: 'Email is required' });
+    }
+
+    const user = await User.findOne({ email: email.toLowerCase() });
+    if (!user) {
+      // Don't reveal if user exists or not for security, just say email sent
+      return res.status(200).json({ message: 'If an account exists, a reset link has been sent.' });
+    }
+
+    const resetToken = crypto.randomBytes(32).toString('hex');
+    user.resetPasswordToken = resetToken;
+    user.resetPasswordExpires = Date.now() + 60 * 60 * 1000; // 1 hour
+
+    await user.save();
+
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+    const resetUrl = `${frontendUrl}/reset-password/${resetToken}`;
+
+    const message = `You requested a password reset. Please go to this link to reset your password:\n\n${resetUrl}\n\nIf you did not request this, please ignore this email.`;
+    const html = `
+      <h2>Password Reset</h2>
+      <p>You requested a password reset. Please click the link below to set a new password:</p>
+      <a href="${resetUrl}" target="_blank">Reset Password</a>
+      <p>If you did not request this, please ignore this email.</p>
+    `;
+
+    try {
+      await sendEmail({
+        email: user.email,
+        subject: 'CoDev - Password Reset',
+        message,
+        html
+      });
+      res.status(200).json({ message: 'If an account exists, a reset link has been sent.' });
+    } catch (err) {
+      console.error('Failed to send reset email:', err);
+      user.resetPasswordToken = undefined;
+      user.resetPasswordExpires = undefined;
+      await user.save();
+      return res.status(500).json({ error: 'Error sending email. Please try again later.' });
+    }
+  } catch (err) {
+    console.error('Forgot password error:', err);
+    res.status(500).json({ error: 'Failed to process request. Please try again.' });
+  }
+};
+
+export const resetPassword = async (req, res) => {
+  try {
+    const { token } = req.params;
+    const { password } = req.body;
+
+    if (!password) {
+      return res.status(400).json({ error: 'Password is required' });
+    }
+
+    if (password.length < 6) {
+      return res.status(400).json({ error: 'Password must be at least 6 characters long' });
+    }
+
+    const user = await User.findOne({
+      resetPasswordToken: token,
+      resetPasswordExpires: { $gt: Date.now() }
+    });
+
+    if (!user) {
+      return res.status(400).json({ error: 'Password reset token is invalid or has expired.' });
+    }
+
+    const salt = await bcrypt.genSalt(10);
+    user.password = await bcrypt.hash(password, salt);
+    user.resetPasswordToken = undefined;
+    user.resetPasswordExpires = undefined;
+
+    await user.save();
+
+    res.status(200).json({ message: 'Password has been reset successfully. You can now log in.' });
+  } catch (err) {
+    console.error('Reset password error:', err);
+    res.status(500).json({ error: 'Failed to reset password. Please try again.' });
   }
 };
