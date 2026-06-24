@@ -52,6 +52,7 @@ export const listWorkspaces = async (req, res) => {
       return {
         roomId: link.roomId,
         name: room ? room.name : 'Collaborative Workspace',
+        language: room ? room.language : 'javascript',
         savedAt: link.savedAt,
         createdAt: room ? room.createdAt : link.savedAt
       };
@@ -113,5 +114,27 @@ export const checkBookmarkStatus = async (req, res) => {
     res.status(200).json({ bookmarked: !!bookmark });
   } catch (err) {
     res.status(500).json({ error: 'Failed to check bookmark status' });
+  }
+};
+
+export const updateWorkspaceLanguage = async (req, res) => {
+  try {
+    const { roomId } = req.params;
+    const { language } = req.body;
+
+    if (!language) {
+      return res.status(400).json({ error: 'Language is required' });
+    }
+
+    const room = await Room.findOneAndUpdate(
+      { roomId },
+      { language },
+      { new: true, upsert: true }
+    );
+
+    res.status(200).json({ message: 'Language updated successfully', room });
+  } catch (err) {
+    console.error('Error updating language:', err);
+    res.status(500).json({ error: 'Failed to update language' });
   }
 };

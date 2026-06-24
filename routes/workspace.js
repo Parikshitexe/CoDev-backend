@@ -5,7 +5,8 @@ import {
   listWorkspaces,
   removeWorkspace,
   renameWorkspace,
-  checkBookmarkStatus
+  checkBookmarkStatus,
+  updateWorkspaceLanguage
 } from '../controllers/workspaceController.js';
 
 const router = express.Router();
@@ -15,5 +16,6 @@ router.get('/', auth, listWorkspaces);
 router.delete('/:roomId', auth, removeWorkspace);
 router.put('/:roomId', auth, renameWorkspace);
 router.get('/:roomId/status', auth, checkBookmarkStatus);
+router.put('/:roomId/language', auth, updateWorkspaceLanguage);
 
 export default router;

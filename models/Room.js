@@ -14,6 +14,10 @@ const roomSchema = new mongoose.Schema({
     type: Buffer, 
     default: null 
   },
+  language: {
+    type: String,
+    default: 'javascript'
+  },
   createdAt: { 
     type: Date, 
     default: Date.now 
