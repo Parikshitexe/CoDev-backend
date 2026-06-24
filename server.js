@@ -48,10 +48,21 @@ ySocketIO.initialize();
 
 ySocketIO.nsp.use(async (socket, next) => {
   try {
-    const sockets = await socket.nsp.allSockets();
-    if (sockets.size >= 5) {
+    const roomId = socket.handshake.auth?.roomId;
+    
+    // If the frontend didn't pass a roomId, we just let it connect. 
+    // It can't join a document anyway without knowing its name.
+    if (!roomId) {
+      return next();
+    }
+
+    // Check the number of users *currently in this specific room*
+    const room = socket.nsp.adapter.rooms.get(roomId);
+    
+    if (room && room.size >= 5) {
       return next(new Error("ROOM_FULL"));
     }
+    
     next();
   } catch (err) {
     next(err);
