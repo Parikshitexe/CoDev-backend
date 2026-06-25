@@ -3,17 +3,17 @@ import UserWorkspace from '../models/UserWorkspace.js';
 
 export const bookmarkWorkspace = async (req, res) => {
   try {
-    const { roomId, name } = req.body;
+    const { roomId, name } = req.body ?? {};
     if (!roomId) {
       return res.status(400).json({ error: 'Room ID is required' });
     }
 
     if (name) {
-      const links = await UserWorkspace.find({ userId: req.user.id });
-      const roomIds = links.map(l => l.roomId);
+      const links = await UserWorkspace.find({ userId: req.user?.id });
+      const roomIds = links?.map(l => l?.roomId) ?? [];
       const existingRoom = await Room.findOne({ 
         roomId: { $in: roomIds }, 
-        name: { $regex: `^${name.trim()}$`, $options: 'i' } 
+        name: { $regex: `^${name?.trim()}$`, $options: 'i' } 
       });
       if (existingRoom && existingRoom.roomId !== roomId) {
         return res.status(400).json({ error: 'A workspace with this name already exists' });
@@ -27,7 +27,7 @@ export const bookmarkWorkspace = async (req, res) => {
     );
 
     await UserWorkspace.findOneAndUpdate(
-      { userId: req.user.id, roomId },
+      { userId: req.user?.id, roomId },
       { savedAt: new Date() },
       { upsert: true }
     );
@@ -40,23 +40,23 @@ export const bookmarkWorkspace = async (req, res) => {
 
 export const listWorkspaces = async (req, res) => {
   try {
-    const links = await UserWorkspace.find({ userId: req.user.id }).sort({ savedAt: -1 });
-    const roomIds = links.map(link => link.roomId);
+    const links = await UserWorkspace.find({ userId: req.user?.id }).sort({ savedAt: -1 });
+    const roomIds = links?.map(link => link?.roomId) ?? [];
 
     const rooms = await Room.find({ roomId: { $in: roomIds } });
 
-    const roomsMap = new Map(rooms.map(room => [room.roomId, room]));
+    const roomsMap = new Map(rooms?.map(room => [room?.roomId, room]) ?? []);
 
-    const workspaceList = links.map(link => {
-      const room = roomsMap.get(link.roomId);
+    const workspaceList = links?.map(link => {
+      const room = roomsMap.get(link?.roomId);
       return {
-        roomId: link.roomId,
-        name: room ? room.name : 'Collaborative Workspace',
-        language: room ? room.language : 'javascript',
-        savedAt: link.savedAt,
-        createdAt: room ? room.createdAt : link.savedAt
+        roomId: link?.roomId,
+        name: room?.name ?? 'Collaborative Workspace',
+        language: room?.language ?? 'javascript',
+        savedAt: link?.savedAt,
+        createdAt: room?.createdAt ?? link?.savedAt
       };
-    });
+    }) ?? [];
 
     res.status(200).json(workspaceList);
   } catch (err) {
@@ -66,8 +66,8 @@ export const listWorkspaces = async (req, res) => {
 
 export const removeWorkspace = async (req, res) => {
   try {
-    const { roomId } = req.params;
-    await UserWorkspace.findOneAndDelete({ userId: req.user.id, roomId });
+    const { roomId } = req.params ?? {};
+    await UserWorkspace.findOneAndDelete({ userId: req.user?.id, roomId });
     res.status(200).json({ message: 'Workspace removed from dashboard' });
   } catch (err) {
     res.status(500).json({ error: 'Failed to remove workspace' });
@@ -76,8 +76,8 @@ export const removeWorkspace = async (req, res) => {
 
 export const renameWorkspace = async (req, res) => {
   try {
-    const { roomId } = req.params;
-    const { name } = req.body;
+    const { roomId } = req.params ?? {};
+    const { name } = req.body ?? {};
 
     if (!name || !name.trim()) {
       return res.status(400).json({ error: 'Name is required' });
@@ -85,8 +85,8 @@ export const renameWorkspace = async (req, res) => {
 
     const trimmedName = name.trim();
     
-    const links = await UserWorkspace.find({ userId: req.user.id });
-    const roomIds = links.map(l => l.roomId);
+    const links = await UserWorkspace.find({ userId: req.user?.id });
+    const roomIds = links?.map(l => l?.roomId) ?? [];
     const existingRoom = await Room.findOne({ 
       roomId: { $in: roomIds }, 
       name: { $regex: `^${trimmedName}$`, $options: 'i' } 
@@ -109,8 +109,8 @@ export const renameWorkspace = async (req, res) => {
 
 export const checkBookmarkStatus = async (req, res) => {
   try {
-    const { roomId } = req.params;
-    const bookmark = await UserWorkspace.findOne({ userId: req.user.id, roomId });
+    const { roomId } = req.params ?? {};
+    const bookmark = await UserWorkspace.findOne({ userId: req.user?.id, roomId });
     res.status(200).json({ bookmarked: !!bookmark });
   } catch (err) {
     res.status(500).json({ error: 'Failed to check bookmark status' });
@@ -119,8 +119,8 @@ export const checkBookmarkStatus = async (req, res) => {
 
 export const updateWorkspaceLanguage = async (req, res) => {
   try {
-    const { roomId } = req.params;
-    const { language } = req.body;
+    const { roomId } = req.params ?? {};
+    const { language } = req.body ?? {};
 
     if (!language) {
       return res.status(400).json({ error: 'Language is required' });

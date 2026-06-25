@@ -1,7 +1,7 @@
 import { runCodeInDocker } from '../utils/dockerRunner.js';
 
 export const executeCode = async (req, res) => {
-  const { code, language, input } = req.body;
+  const { code, language, input } = req.body ?? {};
 
   if (!code || !language) {
     return res.status(400).json({ error: "Code and language are required" });
@@ -21,7 +21,7 @@ export const executeCode = async (req, res) => {
     console.error("Docker Execution Error:", error);
     
     // Check if the error is our "Unsupported language" error
-    if (error.message === 'Unsupported language') {
+    if (error?.message === 'Unsupported language') {
       return res.status(400).json({ error: "Unsupported language" });
     }
 

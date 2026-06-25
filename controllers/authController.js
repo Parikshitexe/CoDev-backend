@@ -13,17 +13,17 @@ const cookieOptions = {
 
 export const register = async (req, res) => {
   try {
-    const { username, email, password } = req.body;
+    const { username, email, password } = req.body ?? {};
 
     if (!username || !email || !password) {
       return res.status(400).json({ error: 'All fields are required' });
     }
 
-    if (password.length < 6) {
+    if (password?.length < 6) {
       return res.status(400).json({ error: 'Password must be at least 6 characters long' });
     }
 
-    const emailExists = await User.findOne({ email: email.toLowerCase() });
+    const emailExists = await User.findOne({ email: email?.toLowerCase() });
     if (emailExists) {
       return res.status(400).json({ error: 'Email is already registered' });
     }
@@ -63,7 +63,7 @@ export const register = async (req, res) => {
 
     try {
       await sendEmail({
-        email: savedUser.email,
+        email: savedUser?.email,
         subject: 'CoDev - Verify Your Email',
         message,
         html
@@ -85,28 +85,28 @@ export const register = async (req, res) => {
 
 export const login = async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const { email, password } = req.body ?? {};
 
     if (!email || !password) {
       return res.status(400).json({ error: 'Email and password are required' });
     }
 
-    const user = await User.findOne({ email: email.toLowerCase() });
+    const user = await User.findOne({ email: email?.toLowerCase() });
     if (!user) {
       return res.status(400).json({ error: 'Invalid credentials' });
     }
 
-    const validPassword = await bcrypt.compare(password, user.password);
+    const validPassword = await bcrypt.compare(password, user?.password ?? '');
     if (!validPassword) {
       return res.status(400).json({ error: 'Invalid credentials' });
     }
 
-    if (!user.isVerified) {
+    if (!user?.isVerified) {
       return res.status(403).json({ error: 'Please verify your email to log in' });
     }
 
     const token = jwt.sign(
-      { id: user._id },
+      { id: user?._id },
       process.env.JWT_SECRET,
       { expiresIn: '7d' }
     );
@@ -115,10 +115,10 @@ export const login = async (req, res) => {
 
     res.status(200).json({
       user: {
-        id: user._id,
-        username: user.username,
-        email: user.email,
-        theme: user.theme
+        id: user?._id,
+        username: user?.username,
+        email: user?.email,
+        theme: user?.theme
       }
     });
   } catch (err) {
@@ -133,7 +133,7 @@ export const logout = (req, res) => {
 
 export const verifyEmail = async (req, res) => {
   try {
-    const { token } = req.params;
+    const { token } = req.params ?? {};
     console.log(`[VERIFY] Received Token:`, token);
 
     const user = await User.findOne({
@@ -163,12 +163,12 @@ export const verifyEmail = async (req, res) => {
 
 export const forgotPassword = async (req, res) => {
   try {
-    const { email } = req.body;
+    const { email } = req.body ?? {};
     if (!email) {
       return res.status(400).json({ error: 'Email is required' });
     }
 
-    const user = await User.findOne({ email: email.toLowerCase() });
+    const user = await User.findOne({ email: email?.toLowerCase() });
     if (!user) {
       // Don't reveal if user exists or not for security, just say email sent
       return res.status(200).json({ message: 'If an account exists, a reset link has been sent.' });
@@ -176,7 +176,7 @@ export const forgotPassword = async (req, res) => {
 
     const resetToken = crypto.randomBytes(32).toString('hex');
     user.resetPasswordToken = resetToken;
-    user.resetPasswordExpires = Date.now() + 60 * 60 * 1000; // 1 hour
+    user.resetPasswordExpires = Date.now() + 3600000; // 1 hour
 
     await user.save();
 
@@ -214,8 +214,8 @@ export const forgotPassword = async (req, res) => {
 
 export const resetPassword = async (req, res) => {
   try {
-    const { token } = req.params;
-    const { password } = req.body;
+    const { token } = req.params ?? {};
+    const { password } = req.body ?? {};
 
     if (!password) {
       return res.status(400).json({ error: 'Password is required' });
@@ -235,7 +235,8 @@ export const resetPassword = async (req, res) => {
     }
 
     const salt = await bcrypt.genSalt(10);
-    user.password = await bcrypt.hash(password, salt);
+    const hashedPassword = await bcrypt.hash(password, salt);
+    user.password = hashedPassword;
     user.resetPasswordToken = undefined;
     user.resetPasswordExpires = undefined;
 
