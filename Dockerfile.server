@@ -1,0 +1,30 @@
+# ================================================================
+# Backend Server Dockerfile (for the Node.js Express API)
+# ================================================================
+# This is DIFFERENT from the execution sandbox Dockerfile.
+# This runs the CoDev backend API server itself.
+#
+# Build: docker build -f Dockerfile.server -t codev-backend .
+# ================================================================
+
+FROM node:20-alpine
+
+# Install Docker CLI so the backend can spawn code-runner containers (DooD pattern)
+RUN apk add --no-cache docker-cli
+
+WORKDIR /app
+
+# Copy package files first for better layer caching
+COPY package*.json ./
+
+# Install production dependencies only
+RUN npm ci --omit=dev
+
+# Copy all source files
+COPY . .
+
+# Expose the backend API port
+EXPOSE 3000
+
+# Start the Node.js server
+CMD ["node", "server.js"]

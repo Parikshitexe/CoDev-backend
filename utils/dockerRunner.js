@@ -7,14 +7,23 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const TEMP_DIR = path.resolve(__dirname, '../temp');
+// CRITICAL for Docker-out-of-Docker (DooD):
+// When the backend runs inside a Docker container, __dirname resolves to a path
+// INSIDE the container (e.g. /app/utils). The host Docker daemon cannot mount
+// that path. HOST_TEMP_PATH must be set to the HOST machine's actual temp directory
+// so Docker can correctly bind-mount it into the code runner container.
+const CONTAINER_TEMP_DIR = path.resolve(__dirname, '../temp');
+const HOST_TEMP_DIR = process.env.HOST_TEMP_PATH
+  ? path.resolve(process.env.HOST_TEMP_PATH)
+  : CONTAINER_TEMP_DIR;
 
-// Ensure the temp directory exists
+
+// Ensure the temp directory exists (creates on CONTAINER path)
 async function ensureTempDir() {
   try {
-    await fs.access(TEMP_DIR);
+    await fs.access(CONTAINER_TEMP_DIR);
   } catch {
-    await fs.mkdir(TEMP_DIR, { recursive: true });
+    await fs.mkdir(CONTAINER_TEMP_DIR, { recursive: true });
   }
 }
 
@@ -53,7 +62,10 @@ export const runCodeInDocker = async (code, language, input = "") => {
 
   // Create a unique execution folder for this specific run
   const runId = uuidv4();
-  const runDir = path.join(TEMP_DIR, runId);
+  // CONTAINER_TEMP_DIR is used for actual file I/O (writing code files)
+  const runDir = path.join(CONTAINER_TEMP_DIR, runId);
+  // HOST_TEMP_DIR is used for the Docker volume mount (must be a host-visible path)
+  const hostRunDir = path.join(HOST_TEMP_DIR, runId);
   const containerName = `run-${runId}`;
 
   await fs.mkdir(runDir, { recursive: true });
@@ -68,8 +80,8 @@ export const runCodeInDocker = async (code, language, input = "") => {
       await fs.writeFile(inputPath, input);
     }
 
-    // Windows Docker needs absolute paths formatted correctly. path.resolve works well.
-    const volumeMount = `"${runDir}:/usr/src/app"`;
+    // Volume mount uses the HOST path so the host Docker daemon can find it
+    const volumeMount = `"${hostRunDir}:/usr/src/app"`;
     
     // Command to execute inside the container
     const containerCommand = config.getCommand(config.filename, !!input);
@@ -108,7 +120,7 @@ export const runCodeInDocker = async (code, language, input = "") => {
     // 1. ALWAYS force kill the container just in case Node's exec died and left it running in the background
     exec(`docker rm -f ${containerName}`, () => {});
 
-    // 2. Clean up the temporary directory after execution finishes
+    // 2. Clean up the temporary directory (use container path for fs operations)
     try {
       await fs.rm(runDir, { recursive: true, force: true });
     } catch (cleanupError) {
