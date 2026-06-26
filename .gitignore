@@ -1,2 +1,6 @@
 node_modules
 .env
+
+# Runtime directories created during code execution — do not commit
+temp/
+temp_runs/

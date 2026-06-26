@@ -93,6 +93,17 @@ app.get('/health', (req, res)=>{
 })
 
 
-httpServer.listen(3000, ()=>{
-    console.log('Server is running on port 3000');
+httpServer.listen(process.env.PORT || 3000, () => {
+    console.log(`Server is running on port ${process.env.PORT || 3000} [${process.env.NODE_ENV || 'development'}]`);
 })
+
+// Global error handler — must be defined AFTER all routes.
+// Catches any error passed via next(err) and prevents unhandled crashes.
+app.use((err, req, res, next) => {
+    console.error('[Global Error Handler]', err?.message || err);
+    // Don't expose internal error details to the client in production
+    const message = process.env.NODE_ENV === 'production'
+        ? 'An internal server error occurred.'
+        : (err?.message || 'Unknown error');
+    res.status(err?.status || 500).json({ error: message });
+});

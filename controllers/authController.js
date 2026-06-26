@@ -7,7 +7,9 @@ import { sendEmail } from '../utils/sendEmail.js';
 const cookieOptions = {
   httpOnly: true,
   secure: process.env.NODE_ENV === 'production',
-  sameSite: 'strict',
+  // 'lax' is required when using a reverse proxy (Nginx) — 'strict' can cause
+  // the browser to drop the cookie on redirects in that setup.
+  sameSite: process.env.NODE_ENV === 'production' ? 'lax' : 'strict',
   maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
 };
 
@@ -39,7 +41,7 @@ export const register = async (req, res) => {
     const verificationToken = crypto.randomBytes(32).toString('hex');
     const verificationTokenExpires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
 
-    console.log(`[REGISTER] Generated Token for ${email}:`, verificationToken);
+
 
     const newUser = new User({
       username,
@@ -51,7 +53,8 @@ export const register = async (req, res) => {
 
     const savedUser = await newUser.save();
 
-    const verifyUrl = `http://localhost:5173/verify/${verificationToken}`;
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+    const verifyUrl = `${frontendUrl}/verify/${verificationToken}`;
     
     const message = `Welcome to CoDev! Please verify your email by clicking the link below:\n\n${verifyUrl}\n\nThis link will expire in 24 hours.`;
     const html = `
@@ -134,7 +137,7 @@ export const logout = (req, res) => {
 export const verifyEmail = async (req, res) => {
   try {
     const { token } = req.params ?? {};
-    console.log(`[VERIFY] Received Token:`, token);
+
 
     const user = await User.findOne({
       verificationToken: token,
@@ -142,11 +145,8 @@ export const verifyEmail = async (req, res) => {
     });
 
     if (!user) {
-      console.log(`[VERIFY] Failed: No user found for token or token expired.`);
       return res.status(400).json({ error: 'Invalid or expired verification token' });
     }
-
-    console.log(`[VERIFY] Success for user:`, user.email);
 
     user.isVerified = true;
     user.verificationToken = undefined;
