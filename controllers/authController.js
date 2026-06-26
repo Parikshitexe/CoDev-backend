@@ -6,7 +6,7 @@ import { sendEmail } from '../utils/sendEmail.js';
 
 const cookieOptions = {
   httpOnly: true,
-  secure: process.env.NODE_ENV === 'production',
+  secure: false, // Must be false because the Lightsail IP does not have HTTPS/SSL
   // 'lax' is required when using a reverse proxy (Nginx) — 'strict' can cause
   // the browser to drop the cookie on redirects in that setup.
   sameSite: process.env.NODE_ENV === 'production' ? 'lax' : 'strict',
